@@ -1,14 +1,4 @@
 <script setup lang="ts">
-import {
-  LMap,
-  LTileLayer,
-  LMarker,
-  LPopup,
-  LTooltip,
-  LIcon,
-} from '@vue-leaflet/vue-leaflet'
-import 'leaflet/dist/leaflet.css'
-
 // Props
 interface Marker {
   id: number | string
@@ -38,6 +28,31 @@ const emit = defineEmits<{
   markerClick: [marker: Marker]
   mapClick: [latlng: { lat: number; lng: number }]
 }>()
+
+// Lazy load Leaflet components (client-side only)
+const LMap = defineAsyncComponent(() =>
+  import('@vue-leaflet/vue-leaflet').then((m) => m.LMap)
+)
+const LTileLayer = defineAsyncComponent(() =>
+  import('@vue-leaflet/vue-leaflet').then((m) => m.LTileLayer)
+)
+const LMarker = defineAsyncComponent(() =>
+  import('@vue-leaflet/vue-leaflet').then((m) => m.LMarker)
+)
+const LPopup = defineAsyncComponent(() =>
+  import('@vue-leaflet/vue-leaflet').then((m) => m.LPopup)
+)
+const LTooltip = defineAsyncComponent(() =>
+  import('@vue-leaflet/vue-leaflet').then((m) => m.LTooltip)
+)
+const LIcon = defineAsyncComponent(() =>
+  import('@vue-leaflet/vue-leaflet').then((m) => m.LIcon)
+)
+
+// Import CSS only on client-side
+onMounted(() => {
+  import('leaflet/dist/leaflet.css')
+})
 
 // State
 const mapRef = ref<InstanceType<typeof LMap> | null>(null)
