@@ -1,0 +1,8 @@
+/* Global font settings */
+:root {
+  --font-family-base: 'Kanit', 'Roboto', sans-serif;
+}
+
+* {
+  font-family: var(--font-family-base) !important;
+}

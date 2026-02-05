@@ -1,0 +1,18 @@
+<template>
+  <v-container 
+    class="pa-0 auth-layout" 
+    fluid
+  >
+    <slot />
+  </v-container>
+</template>
+
+<style scoped>
+.auth-layout {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+</style>
