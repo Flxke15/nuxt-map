@@ -23,6 +23,7 @@
 const listMenu: Array<{ id: number; title: string; icon: string; route: string }> = [
   { id: 2, title: 'หน้าแรก', icon: 'mdi-home', route: '/Home' },
   { id: 3, title: 'แผนที่โครงการ', icon: 'mdi-map', route: '/MapDemo' },
+  { id: 4, title: 'ตั้งค่า', icon: 'mdi-cog', route: '/Setting' },
 ]
 
 const selectedMenu = ref(listMenu[0]?.id ?? 1)
