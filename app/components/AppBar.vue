@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar>
+  <v-app-bar absolute>
     <v-app-bar-title>
        <v-tabs color="primary" align-tabs="center" v-model="selectedMenu">
         <v-tab

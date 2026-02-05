@@ -1,4 +1,11 @@
 <script setup lang="ts">
+// Import icons จาก assets
+import markerBlue from '~/assets/images/map/marker-icon-blue.png'
+import markerGold from '~/assets/images/map/marker-icon-gold.png'
+import markerGrey from '~/assets/images/map/marker-icon-grey.png'
+import markerRed from '~/assets/images/map/marker-icon-red.png'
+import markerShadow from '~/assets/images/map/marker-shadow.png'
+
 // Props
 interface Marker {
   id: number | string
@@ -14,13 +21,15 @@ interface Props {
   zoom?: number
   markers?: Marker[]
   height?: string
+  selectedMarkerId?: number | string | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  center: () => [13.7563, 100.5018], // Bangkok
+  center: () => [13.702958, 100.543576], // CDG House, Bangkok ถูก Override ด้วยหน้า MapDemo.vue
   zoom: 13,
   markers: () => [],
   height: '400px',
+  selectedMarkerId: null,
 })
 
 // Emits
@@ -60,22 +69,30 @@ const mapRef = ref<InstanceType<typeof LMap> | null>(null)
 // Icon URLs แยกตามประเภท
 const icons = {
   saved: {
-    url: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    url: markerBlue,
+    shadowUrl: markerShadow,
   },
   search: {
-    url: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    url: markerGold,
+    shadowUrl: markerShadow,
   },
   pending: {
-    url: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    url: markerGrey,
+    shadowUrl: markerShadow,
+  },
+  selected: {
+    url: markerRed,
+    shadowUrl: markerShadow,
   },
 }
 
 // Methods
-const getIconUrl = (type?: string) => {
-  return icons[type as keyof typeof icons]?.url || icons.saved.url
+const getIconUrl = (marker: Marker) => {
+  // ถ้า marker นี้ถูกเลือก ให้แสดงสีแดง
+  if (props.selectedMarkerId && marker.id === props.selectedMarkerId) {
+    return icons.selected.url
+  }
+  return icons[marker.type as keyof typeof icons]?.url || icons.saved.url
 }
 
 const onMarkerClick = (marker: Marker) => {
@@ -113,7 +130,7 @@ const onMapClick = (event: L.LeafletMouseEvent) => {
       >
         <!-- Custom Icon ตามประเภท -->
         <LIcon
-          :icon-url="getIconUrl(marker.type)"
+          :icon-url="getIconUrl(marker)"
           :shadow-url="icons.saved.shadowUrl"
           :icon-size="[25, 41]"
           :icon-anchor="[12, 41]"

@@ -29,6 +29,9 @@ export default defineNuxtConfig({
     vuetifyOptions: vuetifyOptions as any
   },
   app: {
+    head: {
+      title: 'Nuxt Demo', // เปลี่ยนชื่อเว็บที่นี่
+    },
     pageTransition: { name: 'page', mode: 'out-in' },
   },
 })
