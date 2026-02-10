@@ -1,8 +1,13 @@
 /* Global font settings */
 :root {
   --font-family-base: 'Kanit', 'Roboto', sans-serif;
+  --font-size-base: 16px;
 }
 
 * {
   font-family: var(--font-family-base) !important;
+}
+
+body {
+  font-size: var(--font-size-base);
 }
