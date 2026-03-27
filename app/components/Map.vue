@@ -16,10 +16,21 @@ interface Marker {
   type?: 'saved' | 'search' | 'pending' // ประเภท marker
 }
 
+interface PolygonData {
+  id: number | string
+  latLngs: [number, number][] // Array of [lat, lng]
+  color?: string
+  fillColor?: string
+  fillOpacity?: number
+  weight?: number
+  name?: string
+}
+
 interface Props {
   center?: [number, number]
   zoom?: number
   markers?: Marker[]
+  polygons?: PolygonData[]
   height?: string
   selectedMarkerId?: number | string | null
 }
@@ -28,6 +39,7 @@ const props = withDefaults(defineProps<Props>(), {
   center: () => [13.702958, 100.543576], // CDG House, Bangkok ถูก Override ด้วยหน้า MapDemo.vue
   zoom: 13,
   markers: () => [],
+  polygons: () => [],
   height: '400px',
   selectedMarkerId: null,
 })
@@ -56,6 +68,9 @@ const LTooltip = defineAsyncComponent(() =>
 )
 const LIcon = defineAsyncComponent(() =>
   import('@vue-leaflet/vue-leaflet').then((m) => m.LIcon)
+)
+const LPolygon = defineAsyncComponent(() =>
+  import('@vue-leaflet/vue-leaflet').then((m) => m.LPolygon)
 )
 
 // Import CSS only on client-side
@@ -110,6 +125,7 @@ const onMapClick = (event: L.LeafletMouseEvent) => {
       ref="mapRef"
       :zoom="props.zoom"
       :center="props.center"
+      :use-global-leaflet="false"
       :style="{ height: props.height, width: '100%' }"
       @click="onMapClick"
     >
@@ -120,6 +136,21 @@ const onMapClick = (event: L.LeafletMouseEvent) => {
         layer-type="base"
         name="OpenStreetMap"
       />
+
+      <!-- Polygons -->
+      <LPolygon
+        v-for="polygon in props.polygons"
+        :key="polygon.id"
+        :lat-lngs="polygon.latLngs"
+        :color="polygon.color || '#3388ff'"
+        :fill-color="polygon.fillColor || '#3388ff'"
+        :fill-opacity="polygon.fillOpacity ?? 0.2"
+        :weight="polygon.weight ?? 2"
+      >
+        <LTooltip v-if="polygon.name">
+          <strong>{{ polygon.name }}</strong>
+        </LTooltip>
+      </LPolygon>
 
       <!-- Markers -->
       <LMarker
@@ -176,6 +207,11 @@ const onMapClick = (event: L.LeafletMouseEvent) => {
 </template>
 
 <style scoped>
+:deep(.leaflet-container) {
+  outline: none;
+  border: none;
+}
+
 .marker-popup h3 {
   margin: 0 0 8px 0;
 }

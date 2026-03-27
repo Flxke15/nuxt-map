@@ -45,6 +45,172 @@ const savedMarkers = ref<MarkerData[]>([
   }
 ])
 
+// ขอบเขตพื้นที่ (dynamic - จากการค้นหา)
+interface PolygonItem {
+  id: string
+  latLngs: [number, number][]
+  color: string
+  fillColor: string
+  fillOpacity: number
+  weight: number
+  name: string
+}
+const polygons = ref<PolygonItem[]>([])
+
+// ค้นหาขอบเขตพื้นที่
+const boundarySearch = ref({
+  province: '',
+  district: '',
+  subdistrict: '',
+})
+const isBoundarySearching = ref(false)
+const boundaryError = ref('')
+
+// สร้าง URL list สำหรับค้นหา boundary จาก Nominatim
+const buildBoundaryQueries = (province: string, district: string, subdistrict: string): string[] => {
+  const base = 'https://nominatim.openstreetmap.org/search'
+  const common = 'format=json&polygon_geojson=1&limit=5&countrycodes=th'
+
+  const structuredParams = new URLSearchParams({
+    format: 'json',
+    polygon_geojson: '1',
+    limit: '5',
+    countrycodes: 'th',
+    state: province,
+  })
+
+  if (subdistrict && district) {
+    structuredParams.set('county', district)
+    structuredParams.set('city', subdistrict)
+    const q = encodeURIComponent(`ตำบล${subdistrict}, อำเภอ${district}, จังหวัด${province}`)
+    return [
+      `${base}?${structuredParams.toString()}`,
+      `${base}?${common}&q=${q}`,
+    ]
+  }
+
+  if (district) {
+    structuredParams.set('county', district)
+    const q = encodeURIComponent(`อำเภอ${district}, จังหวัด${province}`)
+    return [
+      `${base}?${structuredParams.toString()}`,
+      `${base}?${common}&q=${q}`,
+    ]
+  }
+
+  const qTh = encodeURIComponent(`จังหวัด${province}`)
+  const qEn = encodeURIComponent(`${province} Province, Thailand`)
+  return [
+    `${base}?${structuredParams.toString()}`,
+    `${base}?${common}&q=${qTh}`,
+    `${base}?${common}&q=${qEn}`,
+  ]
+}
+
+// แปลง GeoJSON → PolygonItem[] สำหรับ Leaflet
+const geojsonToPolygons = (geojson: any, displayName: string): PolygonItem[] => {
+  const convertRing = (ring: number[][]) =>
+    ring.map((c) => [c[1], c[0]] as [number, number])
+
+  const label = displayName.split(',').slice(0, 3).join(', ')
+  const style = { color: '#e53935', fillColor: '#ef5350', fillOpacity: 0.15, weight: 3 }
+
+  if (geojson.type === 'Polygon') {
+    return [{ id: 'boundary-0', latLngs: convertRing(geojson.coordinates[0]), name: label, ...style }]
+  }
+
+  if (geojson.type === 'MultiPolygon') {
+    return geojson.coordinates
+      .filter((polygon: number[][][]) => polygon[0])
+      .map((polygon: number[][][], i: number) => ({
+        id: `boundary-${i}`,
+        latLngs: convertRing(polygon[0]!),
+        name: label,
+        ...style,
+      }))
+  }
+
+  return []
+}
+
+// ค้นหา boundary result จาก Nominatim (ลองทีละ query จนเจอ)
+const fetchBoundaryResult = async (queries: string[], signal: AbortSignal) => {
+  for (const url of queries) {
+    const response = await fetch(url, {
+      signal,
+      headers: { 'User-Agent': 'NuxtMapApp/1.0' },
+    })
+    if (!response.ok) continue
+
+    const data = await response.json()
+    const candidates = data
+      .filter((r: any) => r.geojson && (r.geojson.type === 'Polygon' || r.geojson.type === 'MultiPolygon'))
+      .sort((a: any, b: any) => {
+        const aScore = a.class === 'boundary' && a.type === 'administrative' ? 0 : 1
+        const bScore = b.class === 'boundary' && b.type === 'administrative' ? 0 : 1
+        return aScore === bScore ? (a.place_rank || 99) - (b.place_rank || 99) : aScore - bScore
+      })
+
+    if (candidates.length > 0) return candidates[0]
+  }
+  return null
+}
+
+const searchBoundary = async () => {
+  const { province, district, subdistrict } = boundarySearch.value
+  if (!province.trim()) {
+    boundaryError.value = 'กรุณากรอกชื่อจังหวัด'
+    return
+  }
+
+  isBoundarySearching.value = true
+  boundaryError.value = ''
+  polygons.value = []
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
+
+  try {
+    const queries = buildBoundaryQueries(province.trim(), district.trim(), subdistrict.trim())
+    const boundaryResult = await fetchBoundaryResult(queries, controller.signal)
+    clearTimeout(timeoutId)
+
+    if (!boundaryResult) {
+      const queryDesc = [
+        subdistrict.trim() ? `ต.${subdistrict.trim()}` : '',
+        district.trim() ? `อ.${district.trim()}` : '',
+        `จ.${province.trim()}`,
+      ].filter(Boolean).join(' ')
+      boundaryError.value = `ไม่พบขอบเขตพื้นที่ "${queryDesc}" — ลองพิมพ์ชื่อเป็นภาษาไทยหรือปรับคำค้นหา`
+      return
+    }
+
+    polygons.value = geojsonToPolygons(boundaryResult.geojson, boundaryResult.display_name)
+
+    const bb = boundaryResult.boundingbox
+    center.value = [
+      (Number.parseFloat(bb[0]) + Number.parseFloat(bb[1])) / 2,
+      (Number.parseFloat(bb[2]) + Number.parseFloat(bb[3])) / 2,
+    ]
+  } catch (error) {
+    clearTimeout(timeoutId)
+    console.error('Boundary search error:', error)
+    if (error instanceof Error && error.name === 'AbortError') {
+      boundaryError.value = 'การค้นหาใช้เวลานานเกินไป กรุณาลองใหม่'
+    } else {
+      boundaryError.value = 'เกิดข้อผิดพลาดในการค้นหาขอบเขต'
+    }
+  } finally {
+    isBoundarySearching.value = false
+  }
+}
+
+const clearBoundary = () => {
+  polygons.value = []
+  boundarySearch.value = { province: '', district: '', subdistrict: '' }
+  boundaryError.value = ''
+}
+
 // ผลการค้นหา (สีเหลือง)
 const searchResult = ref<MarkerData | null>(null)
 
@@ -352,12 +518,86 @@ const deleteMarker = (marker: MarkerData) => {
       </v-list>
     </v-card>
 
+    <!-- ค้นหาขอบเขตพื้นที่ -->
+    <v-card class="mb-4">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" color="deep-purple">mdi-vector-polygon</v-icon>
+        ค้นหาขอบเขตพื้นที่
+      </v-card-title>
+      <v-card-text>
+        <v-row>
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model="boundarySearch.province"
+              label="จังหวัด *"
+              placeholder="เช่น กำแพงเพชร"
+              variant="outlined"
+              density="compact"
+              hide-details
+              prepend-inner-icon="mdi-map"
+              @keyup.enter="searchBoundary"
+            />
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model="boundarySearch.district"
+              label="อำเภอ"
+              placeholder="เช่น เมือง"
+              variant="outlined"
+              density="compact"
+              hide-details
+              prepend-inner-icon="mdi-map-marker-radius"
+              @keyup.enter="searchBoundary"
+            />
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model="boundarySearch.subdistrict"
+              label="ตำบล"
+              placeholder="เช่น สระแก้ว"
+              variant="outlined"
+              density="compact"
+              hide-details
+              prepend-inner-icon="mdi-map-marker"
+              @keyup.enter="searchBoundary"
+            />
+          </v-col>
+          <v-col cols="12" md="3" class="d-flex ga-2">
+            <v-btn
+              :loading="isBoundarySearching"
+              color="deep-purple"
+              @click="searchBoundary"
+              class="flex-grow-1"
+            >
+              <v-icon left>mdi-vector-polygon</v-icon>
+              แสดงขอบเขต
+            </v-btn>
+            <v-btn
+              v-if="polygons.length > 0"
+              variant="outlined"
+              color="grey"
+              @click="clearBoundary"
+            >
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-col>
+        </v-row>
+        <v-alert v-if="boundaryError" type="warning" variant="tonal" density="compact" class="mt-3">
+          {{ boundaryError }}
+        </v-alert>
+        <v-alert v-if="polygons.length > 0" type="success" variant="tonal" density="compact" class="mt-3">
+          แสดงขอบเขต: {{ polygons[0]?.name }}
+        </v-alert>
+      </v-card-text>
+    </v-card>
+
     <!-- แผนที่ -->
     <v-card class="mb-4">
       <Map
         :center="center"
         :markers="allMarkers"
-        :zoom="14"
+        :polygons="polygons"
+        :zoom="12"
         :selected-marker-id="selectedMarker?.id"
         height="500px"
         @marker-click="onMarkerClick"
